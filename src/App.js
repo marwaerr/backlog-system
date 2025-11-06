@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Calendar, TrendingUp, Clock, CheckCircle, AlertCircle, BarChart3, List, X, MessageSquare, Bell, CalendarX, LogOut, User, Lock } from 'lucide-react';
+import { Plus, Search, Calendar, TrendingUp, Clock, CheckCircle, AlertCircle, BarChart3, List, X, MessageSquare, Bell, CalendarX, LogOut, User, Lock, Key, Eye, EyeOff } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const BacklogSystem = () => {
@@ -13,6 +13,21 @@ const BacklogSystem = () => {
   const [loginError, setLoginError] = useState('');
   const [loading, setLoading] = useState(false);
   const [appLoading, setAppLoading] = useState(true);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
+  // États pour le changement de mot de passe
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // États de l'application
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -135,6 +150,69 @@ const BacklogSystem = () => {
       setRequests([]);
     } catch (error) {
       console.error('Erreur déconnexion:', error);
+    }
+  };
+
+  // Fonction pour changer le mot de passe
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPasswordLoading(true);
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    // Validation
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('Les nouveaux mots de passe ne correspondent pas');
+      setPasswordLoading(false);
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordError('Le nouveau mot de passe doit contenir au moins 6 caractères');
+      setPasswordLoading(false);
+      return;
+    }
+
+    try {
+      // Vérifier d'abord le mot de passe actuel
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: passwordForm.currentPassword,
+      });
+
+      if (signInError) {
+        setPasswordError('Mot de passe actuel incorrect');
+        setPasswordLoading(false);
+        return;
+      }
+
+      // Changer le mot de passe
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordForm.newPassword
+      });
+
+      if (updateError) throw updateError;
+
+      setPasswordSuccess('Mot de passe changé avec succès!');
+      
+      // Réinitialiser le formulaire
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+
+      // Fermer le modal après 2 secondes
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setPasswordSuccess('');
+      }, 2000);
+
+    } catch (error) {
+      console.error('Erreur changement mot de passe:', error);
+      setPasswordError('Erreur lors du changement de mot de passe');
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -490,13 +568,20 @@ const BacklogSystem = () => {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                 <input
-                  type="password"
-                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  type={showLoginPassword ? "text" : "password"}
+                  className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   placeholder="Votre mot de passe"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showLoginPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
             </div>
 
@@ -517,7 +602,7 @@ const BacklogSystem = () => {
 
           <div className="mt-6 p-4 bg-gray-50 rounded-xl">
             <p className="text-xs text-gray-600 text-center">
-              Accès réservé au personnel OCP Nutricrops
+              Accès réservé à l'équipe support technique d'OCP Nutricrops
             </p>
           </div>
         </div>
@@ -562,6 +647,15 @@ const BacklogSystem = () => {
                   <Plus size={20} />
                   Nouvelle Requête
                 </button>
+
+                <button
+                  onClick={() => setShowPasswordModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 sm:py-3 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-all shadow-lg hover:shadow-xl text-sm sm:text-base"
+                  title="Changer le mot de passe"
+                >
+                  <Key size={20} />
+                  <span className="hidden sm:inline">Mot de passe</span>
+                </button>
                 
                 <button
                   onClick={handleLogout}
@@ -603,6 +697,151 @@ const BacklogSystem = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal de changement de mot de passe */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 sm:p-6 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl sm:text-2xl font-bold">Changer le mot de passe</h3>
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordForm({
+                      currentPassword: '',
+                      newPassword: '',
+                      confirmPassword: ''
+                    });
+                    setPasswordError('');
+                    setPasswordSuccess('');
+                  }}
+                  className="p-2 hover:bg-white/20 rounded-lg transition"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-4 sm:p-6">
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Mot de passe actuel
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                      type={showCurrentPassword ? "text" : "password"}
+                      className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Votre mot de passe actuel"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showCurrentPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Nouveau mot de passe
+                  </label>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Nouveau mot de passe"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showNewPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Confirmer le nouveau mot de passe
+                  </label>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Confirmer le nouveau mot de passe"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </div>
+
+                {passwordError && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <p className="text-red-600 text-sm font-semibold">{passwordError}</p>
+                  </div>
+                )}
+
+                {passwordSuccess && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <p className="text-green-600 text-sm font-semibold">{passwordSuccess}</p>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                  <button
+                    type="submit"
+                    disabled={passwordLoading}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {passwordLoading ? 'Changement...' : 'Changer le mot de passe'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPasswordModal(false);
+                      setPasswordForm({
+                        currentPassword: '',
+                        newPassword: '',
+                        confirmPassword: ''
+                      });
+                      setPasswordError('');
+                      setPasswordSuccess('');
+                    }}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-semibold"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Le reste de votre interface utilisateur reste identique... */}
+      {/* [Tout le code existant pour les modals, dashboard, liste, etc.] */}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Form Modal */}
