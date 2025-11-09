@@ -53,9 +53,9 @@ const BacklogSystem = () => {
     demandeur: '',
     assignee: '',
     statut: 'En attente',
-    deadline: '',
+    deadline: '', // Maintenant facultatif
     frequence_rappel: null,
-    date_cloture: null,
+    date_cloture: null, // Date de clôture séparée
     priority: 'Moyenne'
   });
 
@@ -265,7 +265,7 @@ const BacklogSystem = () => {
         demandeur: newRequest.demandeur,
         assignee: newRequest.assignee,
         statut: newRequest.statut,
-        deadline: newRequest.deadline,
+        deadline: newRequest.deadline || null, // Accepte null pour deadline facultatif
         frequence_rappel: newRequest.frequence_rappel,
         priority: newRequest.priority,
         created_by: currentUser.id
@@ -366,11 +366,18 @@ const BacklogSystem = () => {
         }
       }
 
+      // MODIFICATION : Logique améliorée pour la date de clôture
       if (field === 'statut' && value === 'Clôturé') {
-        updateData.date_cloture = new Date().toISOString().split('T')[0];
+        // Si le statut passe à "Clôturé" mais qu'aucune date de clôture n'est définie,
+        // on utilise la date actuelle par défaut
+        if (!request.dateCloture) {
+          updateData.date_cloture = new Date().toISOString().split('T')[0];
+        }
         updateData.frequence_rappel = null;
       } else if (field === 'statut' && value !== 'Clôturé') {
-        updateData.date_cloture = null;
+        // Si on revient d'un statut "Clôturé", on garde la date de clôture précédente
+        // L'utilisateur peut la modifier manuellement s'il le souhaite
+        // Ne pas réinitialiser automatiquement la date_cloture
       }
 
       const { error } = await supabase
@@ -500,6 +507,15 @@ const BacklogSystem = () => {
     if (enRetard) {
       return { label: 'En retard', color: getStatutColor('', true) };
     }
+    
+    // Indicateur pour les requêtes sans deadline
+    if (!req.deadline && req.statut !== 'Clôturé') {
+      return { 
+        label: `${req.statut} (sans deadline)`, 
+        color: getStatutColor(req.statut) 
+      };
+    }
+    
     return { label: req.statut, color: getStatutColor(req.statut) };
   };
 
@@ -832,9 +848,6 @@ const BacklogSystem = () => {
         </div>
       )}
 
-      {/* Le reste de votre interface utilisateur reste identique... */}
-      {/* [Tout le code existant pour les modals, dashboard, liste, etc.] */}
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Form Modal */}
         {showForm && (
@@ -914,7 +927,9 @@ const BacklogSystem = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Deadline</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Deadline <span className="text-gray-400 text-xs">(facultatif)</span>
+                    </label>
                     <input
                       type="date"
                       className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -1292,7 +1307,7 @@ const BacklogSystem = () => {
                         </button>
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-4 border-t">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 pt-4 border-t">
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-1">Date Réception</p>
                           <p className="text-sm font-bold text-gray-800">{req.dateReception}</p>
@@ -1309,33 +1324,35 @@ const BacklogSystem = () => {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-1">Deadline</p>
-                          {req.deadline ? (
-                            <div className="flex items-center gap-1">
-                              <CalendarX size={14} className={isEnRetard(req) ? 'text-red-500' : 'text-gray-500'} />
-                              <input
-                                type="date"
-                                className="text-sm font-bold text-gray-800 flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                value={req.deadline}
-                                onChange={(e) => updateRequest(req.id, 'deadline', e.target.value)}
-                              />
-                            </div>
-                          ) : (
+                          <div className="flex items-center gap-1">
+                            <CalendarX size={14} className={isEnRetard(req) ? 'text-red-500' : 'text-gray-500'} />
                             <input
                               type="date"
-                              className="text-sm text-gray-800 w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                              value={req.deadline}
-                              onChange={(e) => updateRequest(req.id, 'deadline', e.target.value)}
-                              placeholder="Aucune"
+                              className="text-sm font-bold text-gray-800 flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              value={req.deadline || ''}
+                              onChange={(e) => updateRequest(req.id, 'deadline', e.target.value || null)}
                             />
-                          )}
+                          </div>
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-1">Date Clôture</p>
-                          {req.dateCloture ? (
-                            <p className="text-sm font-bold text-green-600">{req.dateCloture}</p>
-                          ) : (
-                            <p className="text-sm text-gray-400">Non clôturé</p>
-                          )}
+                          <input
+                            type="date"
+                            className="text-sm font-bold text-gray-800 w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            value={req.dateCloture || ''}
+                            onChange={(e) => updateRequest(req.id, 'dateCloture', e.target.value || null)}
+                            placeholder="Non clôturé"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 mb-1">Statut</p>
+                          <select
+                            className="text-sm font-bold text-gray-800 w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            value={req.statut}
+                            onChange={(e) => updateRequest(req.id, 'statut', e.target.value)}
+                          >
+                            {statuts.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
                         </div>
                       </div>
 
@@ -1350,13 +1367,6 @@ const BacklogSystem = () => {
                           <MessageSquare size={16} />
                           Follow-ups ({req.followUps.length})
                         </button>
-                        <select
-                          className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-semibold flex-1"
-                          value={req.statut}
-                          onChange={(e) => updateRequest(req.id, 'statut', e.target.value)}
-                        >
-                          {statuts.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
                       </div>
                     </div>
                   </div>
