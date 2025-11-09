@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Calendar, TrendingUp, Clock, CheckCircle, AlertCircle, BarChart3, List, X, MessageSquare, Bell, CalendarX, LogOut, User, Lock, Key, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, TrendingUp, Clock, CheckCircle, AlertCircle, BarChart3, List, X, MessageSquare, Bell, CalendarX, LogOut, User, Lock, Key, Eye, EyeOff, Calendar } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const BacklogSystem = () => {
@@ -40,6 +40,11 @@ const BacklogSystem = () => {
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   
+  // États pour le popup de date de clôture
+  const [showClotureModal, setShowClotureModal] = useState(false);
+  const [clotureDate, setClotureDate] = useState(new Date().toISOString().split('T')[0]);
+  const [requestToCloture, setRequestToCloture] = useState(null);
+  
   const [newFollowUp, setNewFollowUp] = useState({
     date: new Date().toISOString().split('T')[0],
     personne: '',
@@ -53,9 +58,9 @@ const BacklogSystem = () => {
     demandeur: '',
     assignee: '',
     statut: 'En attente',
-    deadline: '',
+    deadline: '', // Maintenant facultatif
     frequence_rappel: null,
-    date_cloture: null,
+    date_cloture: null, // Date de clôture séparée
     priority: 'Moyenne'
   });
 
@@ -265,17 +270,15 @@ const BacklogSystem = () => {
         demandeur: newRequest.demandeur,
         assignee: newRequest.assignee,
         statut: newRequest.statut,
-        deadline: newRequest.deadline,
+        deadline: newRequest.deadline || null, // Accepte null pour deadline facultatif
         frequence_rappel: newRequest.frequence_rappel,
         priority: newRequest.priority,
         created_by: currentUser.id
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('requests')
-        .insert([requestData])
-        .select()
-        .single();
+        .insert([requestData]);
 
       if (error) throw error;
 
@@ -337,6 +340,36 @@ const BacklogSystem = () => {
     }
   };
 
+  // Fonction pour confirmer la clôture avec date
+  const confirmCloture = async () => {
+    if (!requestToCloture) return;
+
+    try {
+      const updateData = {
+        statut: 'Clôturé',
+        date_cloture: clotureDate,
+        frequence_rappel: null
+      };
+
+      const { error } = await supabase
+        .from('requests')
+        .update(updateData)
+        .eq('id', requestToCloture.id);
+
+      if (error) throw error;
+
+      // Fermer le modal et réinitialiser
+      setShowClotureModal(false);
+      setRequestToCloture(null);
+      setClotureDate(new Date().toISOString().split('T')[0]);
+      
+      await fetchRequests();
+    } catch (error) {
+      console.error('Erreur lors de la clôture:', error);
+      alert('Erreur lors de la clôture de la requête');
+    }
+  };
+
   // Mettre à jour une requête
   const updateRequest = async (id, field, value) => {
     try {
@@ -358,6 +391,7 @@ const BacklogSystem = () => {
 
       // Logique métier pour les statuts
       const request = requests.find(req => req.id === id);
+      
       if (field === 'assignee') {
         if (value && request?.statut === 'En attente') {
           updateData.statut = 'En cours';
@@ -366,10 +400,15 @@ const BacklogSystem = () => {
         }
       }
 
+      // MODIFICATION : Gestion spéciale pour le statut "Clôturé"
       if (field === 'statut' && value === 'Clôturé') {
-        updateData.date_cloture = new Date().toISOString().split('T')[0];
-        updateData.frequence_rappel = null;
+        // Ouvrir le popup pour saisir la date de clôture
+        setRequestToCloture(request);
+        setClotureDate(request.dateCloture || new Date().toISOString().split('T')[0]);
+        setShowClotureModal(true);
+        return; // Ne pas mettre à jour immédiatement
       } else if (field === 'statut' && value !== 'Clôturé') {
+        // Si on change d'un statut "Clôturé" vers autre chose, supprimer la date de clôture
         updateData.date_cloture = null;
       }
 
@@ -481,7 +520,7 @@ const BacklogSystem = () => {
       parPriorite,
       parAssignee
     };
-  }, [requests]);
+  }, [requests, priorities]); // CORRECTION: Ajout de 'priorities' dans les dépendances
 
   const getStatutColor = (statut, enRetard = false) => {
     if (enRetard) {
@@ -500,6 +539,15 @@ const BacklogSystem = () => {
     if (enRetard) {
       return { label: 'En retard', color: getStatutColor('', true) };
     }
+    
+    // Indicateur pour les requêtes sans deadline
+    if (!req.deadline && req.statut !== 'Clôturé') {
+      return { 
+        label: `${req.statut} (sans deadline)`, 
+        color: getStatutColor(req.statut) 
+      };
+    }
+    
     return { label: req.statut, color: getStatutColor(req.statut) };
   };
 
@@ -832,8 +880,73 @@ const BacklogSystem = () => {
         </div>
       )}
 
-      {/* Le reste de votre interface utilisateur reste identique... */}
-      {/* [Tout le code existant pour les modals, dashboard, liste, etc.] */}
+      {/* Modal de date de clôture */}
+      {showClotureModal && requestToCloture && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-emerald-600 text-white p-4 sm:p-6 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl sm:text-2xl font-bold">Confirmer la clôture</h3>
+                <button
+                  onClick={() => {
+                    setShowClotureModal(false);
+                    setRequestToCloture(null);
+                  }}
+                  className="p-2 hover:bg-white/20 rounded-lg transition"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-4 sm:p-6">
+              <div className="mb-6">
+                <p className="text-gray-700 mb-2">
+                  Vous êtes sur le point de clôturer la requête :
+                </p>
+                <p className="font-semibold text-lg text-gray-800">"{requestToCloture.title}"</p>
+                <p className="text-sm text-gray-600 mt-1">Demandeur : {requestToCloture.demandeur}</p>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="text-green-600" size={20} />
+                    Date de clôture
+                  </div>
+                </label>
+                <input
+                  type="date"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  value={clotureDate}
+                  onChange={(e) => setClotureDate(e.target.value)}
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Cette date sera utilisée pour le calcul du temps de traitement.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                <button
+                  onClick={confirmCloture}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition font-semibold shadow-lg"
+                >
+                  Confirmer la clôture
+                </button>
+                <button
+                  onClick={() => {
+                    setShowClotureModal(false);
+                    setRequestToCloture(null);
+                  }}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition font-semibold"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Form Modal */}
@@ -914,7 +1027,9 @@ const BacklogSystem = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Deadline</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Deadline <span className="text-gray-400 text-xs">(facultatif)</span>
+                    </label>
                     <input
                       type="date"
                       className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
@@ -1292,7 +1407,7 @@ const BacklogSystem = () => {
                         </button>
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-4 border-t">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 pt-4 border-t">
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-1">Date Réception</p>
                           <p className="text-sm font-bold text-gray-800">{req.dateReception}</p>
@@ -1309,33 +1424,36 @@ const BacklogSystem = () => {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-1">Deadline</p>
-                          {req.deadline ? (
-                            <div className="flex items-center gap-1">
-                              <CalendarX size={14} className={isEnRetard(req) ? 'text-red-500' : 'text-gray-500'} />
-                              <input
-                                type="date"
-                                className="text-sm font-bold text-gray-800 flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                value={req.deadline}
-                                onChange={(e) => updateRequest(req.id, 'deadline', e.target.value)}
-                              />
-                            </div>
-                          ) : (
+                          <div className="flex items-center gap-1">
+                            <CalendarX size={14} className={isEnRetard(req) ? 'text-red-500' : 'text-gray-500'} />
                             <input
                               type="date"
-                              className="text-sm text-gray-800 w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                              value={req.deadline}
-                              onChange={(e) => updateRequest(req.id, 'deadline', e.target.value)}
-                              placeholder="Aucune"
+                              className="text-sm font-bold text-gray-800 flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              value={req.deadline || ''}
+                              onChange={(e) => updateRequest(req.id, 'deadline', e.target.value || null)}
                             />
-                          )}
+                          </div>
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-1">Date Clôture</p>
-                          {req.dateCloture ? (
-                            <p className="text-sm font-bold text-green-600">{req.dateCloture}</p>
-                          ) : (
-                            <p className="text-sm text-gray-400">Non clôturé</p>
-                          )}
+                          <div className="flex items-center gap-1">
+                            <Calendar size={14} className="text-gray-500" />
+                            {req.statut === 'Clôturé' ? (
+                              <p className="text-sm font-bold text-green-600">{req.dateCloture}</p>
+                            ) : (
+                              <p className="text-sm text-gray-400">Non clôturé</p>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 mb-1">Statut</p>
+                          <select
+                            className="text-sm font-bold text-gray-800 w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            value={req.statut}
+                            onChange={(e) => updateRequest(req.id, 'statut', e.target.value)}
+                          >
+                            {statuts.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
                         </div>
                       </div>
 
@@ -1350,13 +1468,6 @@ const BacklogSystem = () => {
                           <MessageSquare size={16} />
                           Follow-ups ({req.followUps.length})
                         </button>
-                        <select
-                          className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-semibold flex-1"
-                          value={req.statut}
-                          onChange={(e) => updateRequest(req.id, 'statut', e.target.value)}
-                        >
-                          {statuts.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
                       </div>
                     </div>
                   </div>
