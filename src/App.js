@@ -65,7 +65,7 @@ const BacklogSystem = () => {
   });
 
   const statuts = ['En attente', 'En cours', 'Clôturé'];
-  const priorities = ['Basse', 'Moyenne', 'Haute', 'Urgente'];
+  const priorities = useMemo(() => ['Basse', 'Moyenne', 'Haute', 'Urgente'], []);
   const frequences = ['Quotidien', 'Hebdomadaire', 'Bimensuel', 'Mensuel'];
 
   // Vérifier la session au chargement
