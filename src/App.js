@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, Calendar, TrendingUp, Clock, CheckCircle, AlertCircle, BarChart3, List, X, MessageSquare, Bell, CalendarX, LogOut, User, Lock, Key, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, TrendingUp, Clock, CheckCircle, AlertCircle, BarChart3, List, X, MessageSquare, Bell, CalendarX, LogOut, User, Lock, Key, Eye, EyeOff } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const BacklogSystem = () => {
@@ -271,11 +271,9 @@ const BacklogSystem = () => {
         created_by: currentUser.id
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('requests')
-        .insert([requestData])
-        .select()
-        .single();
+        .insert([requestData]);
 
       if (error) throw error;
 
@@ -488,7 +486,7 @@ const BacklogSystem = () => {
       parPriorite,
       parAssignee
     };
-  }, [requests]);
+  }, [requests, priorities]); // CORRECTION: Ajout de 'priorities' dans les dépendances
 
   const getStatutColor = (statut, enRetard = false) => {
     if (enRetard) {
